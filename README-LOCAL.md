@@ -2,7 +2,7 @@
 
 ## Render va Google Gemini
 
-Loyiha Render Blueprint uchun `render.yaml` bilan tayyorlangan. Render'da doimiy SQLite va yuklangan fayllar `/var/data` diskida saqlanadi. `GEMINI_API_KEY` faqat Render Secret sifatida kiritiladi; uni Git yoki `.env` fayliga commit qilmang.
+Loyiha Render Blueprint uchun `render.yaml` bilan tayyorlangan. Hozirgi Blueprint bepul Render compute'dan foydalanadi. SQLite va yuklangan fayllar vaqtinchalik `/tmp/memgraph-data` papkasida saqlanadi va servis restart yoki qayta deploy bo‘lganda yo‘qolishi mumkin. `GEMINI_API_KEY` faqat Render Secret sifatida kiritiladi; uni Git yoki `.env` fayliga commit qilmang.
 
 Gemini doimiy ma'lumotlar bazasi o'rnini bosmaydi. SQLite hisoblar, fayllar va yozuvlarni saqlaydi; Gemini esa faqat joriy foydalanuvchiga ruxsat berilgan matnli manbalarni javob yaratish uchun qayta ishlaydi. Render'dagi umumiy sayt uchun lokal demo o'chirilgan — har bir foydalanuvchi alohida hisob yaratadi.
 
@@ -12,7 +12,7 @@ Render sozlamalari:
 - Build command: `npm run check`
 - Start command: `npm start`
 - Health check: `/health`
-- Persistent disk: `/var/data`, 1 GB
+- Storage: `/tmp/memgraph-data` (bepul, vaqtinchalik)
 - Secret: `GEMINI_API_KEY`
 - Optional model override: `GEMINI_MODEL`
 

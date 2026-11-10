@@ -2,18 +2,14 @@ services:
   - type: web
     name: memgraph-neural
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm run check
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: memgraph-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: DATA_DIR
-        value: /var/data
+        value: /tmp/memgraph-data
       - key: NODE_VERSION
         value: 24.11.0
       - key: ALLOW_LOCAL_DEMO
