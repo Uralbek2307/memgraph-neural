@@ -1,0 +1,7 @@
+.env
+server.log
+server-error.log
+node_modules/
+runtime/
+data/
+*.zip

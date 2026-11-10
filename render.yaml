@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: memgraph-neural
+    runtime: node
+    plan: starter
+    buildCommand: npm run check
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: memgraph-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: NODE_VERSION
+        value: 24.11.0
+      - key: ALLOW_LOCAL_DEMO
+        value: "0"
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_API_KEY
+        sync: false
