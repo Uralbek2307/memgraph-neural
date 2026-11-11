@@ -105,6 +105,8 @@ async function newSession(req,res,u,extra={}){if(u.suspended)fail(403,'account_s
 const server=http.createServer(async(req,res)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');res.setHeader('Permissions-Policy','camera=(),microphone=(),geolocation=()');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 try{
 const url=new URL(req.url,ORIGIN),p=url.pathname,method=req.method;
+if(p==='/login'||p==='/login/'){res.writeHead(302,{Location:'/#login','cache-control':'no-store'});res.end();return}
+if(p==='/admin/login'||p==='/admin/login/'){res.writeHead(302,{Location:'/admin','cache-control':'no-store'});res.end();return}
 if(p==='/admin'||p==='/admin/'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});res.end(await readFile(path.join(ROOT,'admin.html')));return}
 if(p.startsWith('/api/admin/')){
 const token=(req.headers.cookie||'').match(/(?:^|;\s*)memgraph_admin=([a-f0-9]+)/)?.[1];
