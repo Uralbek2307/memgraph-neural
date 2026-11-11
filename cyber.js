@@ -33,6 +33,7 @@ home:['Boshqaruv markazi','Command center'],graph:['3D bilimlar grafi','3D knowl
 notesLabel:['QAYDLAR','NOTES'],docsLabel:['HUJJATLAR','DOCUMENTS'],talkLabel:['SUHBATLAR','CONVERSATIONS']
 });
 E.plan_limit=['Tarif limitingiz tugadi. Yuqoriroq tarifni tanlang.','Your plan limit has been reached. Choose a higher plan.'];
+E.account_suspended=['Hisobingiz administrator tomonidan bloklangan.','Your account has been suspended by the administrator.'];
 D.localDemoTitle[1]='DEMO MODE';
 Object.assign(D,{
 plansTitle:['O‘zingizga mos tarifni tanlang','Choose your plan'],plansText:['Har bir tarifda Gemini xotira, manbali javoblar va shaxsiy ish maydoni mavjud.','Every plan includes Gemini memory, source-backed answers, and a private workspace.'],
