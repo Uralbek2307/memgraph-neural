@@ -1,0 +1,16 @@
+name: Telegram daily sales report
+on:
+  schedule:
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: telegram-daily-report
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Send scheduled report at 21:00 Asia/Tashkent
+        run: curl --fail --silent --show-error --retry 3 --retry-delay 15 --max-time 90 --request POST https://memgraph-neural.onrender.com/api/telegram/daily

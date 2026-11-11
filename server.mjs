@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {telegramService} from './telegram.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, createHash, scrypt, timingSafeEqual, createCipheriv, createDecipheriv } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -102,9 +103,14 @@ for(const row of sql("SELECT s.id,s.created,s.expires FROM sessions s JOIN users
 function sessionDto(s,u){return s?{expiresAt:s.expires,demo:u?.username==='memgraph_demo',serverTime:Date.now()}:null}
 const cookieName='memgraph_session';function cookie(value,max=2592000){return `${cookieName}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${max}${ORIGIN.startsWith('https:')?'; Secure':''}`}
 async function newSession(req,res,u,extra={}){if(u.suspended)fail(403,'account_suspended');const sid=id()+id(),csrf=id(),ttl=u.username==='memgraph_demo'?DEMO_SESSION_MS:30*86400000,expires=Date.now()+ttl;run('INSERT INTO sessions VALUES(?,?,?,?,?,?)',hash(sid),u.id,csrf,(req.headers['user-agent']||'').slice(0,250),now(),expires);response(res,{user:{...publicUser(u),email:u.email},csrf,session:sessionDto({expires},u),...extra},200,{'set-cookie':cookie(sid,Math.floor(ttl/1000))})}
+const telegram=telegramService({db,plans:PLANS,origin:ORIGIN});
 const server=http.createServer(async(req,res)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');res.setHeader('Permissions-Policy','camera=(),microphone=(),geolocation=()');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 try{
 const url=new URL(req.url,ORIGIN),p=url.pathname,method=req.method;
+if(p==='/api/telegram/webhook'&&method==='POST'){if(!telegram.verifyWebhook(req.headers['x-telegram-bot-api-secret-token']))fail(403,'permission');await telegram.receive(await body(req));response(res,{ok:true});return}
+// This public trigger can only send today's fixed report to the preconfigured owner,
+// after 21:00 Tashkent, at most once per day. No report contents are returned.
+if(p==='/api/telegram/daily'&&method==='POST'){response(res,await telegram.daily());return}
 if(p==='/login'||p==='/login/'){res.writeHead(302,{Location:'/#login','cache-control':'no-store'});res.end();return}
 if(p==='/admin/login'||p==='/admin/login/'){res.writeHead(302,{Location:'/admin','cache-control':'no-store'});res.end();return}
 if(p==='/admin'||p==='/admin/'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});res.end(await readFile(path.join(ROOT,'admin.html')));return}
@@ -115,6 +121,9 @@ if(method!=='GET'){if(req.headers.origin!==ORIGIN)fail(403,'origin');if(!req.hea
 if(p==='/api/admin/login'&&method==='POST'){rate('admin-login',10);const b=await body(req);if(!adminUsername||!adminPasswordHash)fail(503,'admin_setup');if(b.username!==adminUsername||typeof b.password!=='string'||b.password.length>200||!await verify(b.password,adminPasswordHash))fail(401,'login_failed');const value=id()+id(),csrf=id();run('INSERT INTO admin_sessions VALUES(?,?,?)',hash(value),csrf,Date.now()+3600000);response(res,{ok:true,csrf},200,{'set-cookie':`memgraph_admin=${value}; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=3600${ORIGIN.startsWith('https:')?'; Secure':''}`});return}
 if(!adminSession)fail(401,'login_required');
 if(p==='/api/admin/me'&&method==='GET'){response(res,{username:adminUsername,csrf:adminSession.csrf});return}
+if(p==='/api/admin/telegram'&&method==='GET'){response(res,telegram.status());return}
+if(p==='/api/admin/telegram/pair'&&method==='POST'){if(!telegram.configured())fail(503,'telegram_setup');response(res,{url:telegram.pair()});return}
+if(p==='/api/admin/telegram/report'&&method==='POST'){response(res,await telegram.daily(true));return}
 if(p==='/api/admin/overview'&&method==='GET'){response(res,{users:Number(one('SELECT count(*) n FROM users').n),active:Number(one('SELECT count(*) n FROM users WHERE suspended=0').n),suspended:Number(one('SELECT count(*) n FROM users WHERE suspended=1').n),paid:Number(one("SELECT count(*) n FROM users WHERE plan<>'free' AND (plan_expires IS NULL OR plan_expires>?)",Date.now()).n),storageBytes:Number(one('SELECT coalesce(sum(size),0) n FROM files').n),aiQueries:Number(one('SELECT coalesce(sum(ai_queries),0) n FROM monthly_usage WHERE month=?',monthKey()).n)});return}
 if(p==='/api/admin/logout'&&method==='POST'){run('DELETE FROM admin_sessions WHERE id=?',adminSession.id);response(res,{ok:true},200,{'set-cookie':'memgraph_admin=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0'});return}
 if(p==='/api/admin/users'&&method==='GET'){const q=clean(url.searchParams.get('q'),100).toLowerCase(),page=Math.max(0,Math.min(100000,Math.floor(Number(url.searchParams.get('page'))||0)));const pattern='%'+q.replace(/[!%_]/g,'!$&')+'%';const where=" WHERE username LIKE ? ESCAPE '!' OR email LIKE ? ESCAPE '!' OR name LIKE ? ESCAPE '!'";response(res,{total:one('SELECT count(*) n FROM users'+where,pattern,pattern,pattern).n,users:sql('SELECT * FROM users'+where+' ORDER BY created DESC LIMIT 30 OFFSET ?',pattern,pattern,pattern,page*30).map(user=>({...publicUser(user),email:user.email,suspended:!!user.suspended,billing:planDto(user)})),audit:sql('SELECT action,target,created FROM admin_audit ORDER BY created DESC LIMIT 20')});return}
@@ -143,6 +152,7 @@ if(p==='/api/auth/register'&&method==='POST'){rate('register:'+req.socket.remote
 if(p==='/api/auth/login'&&method==='POST'){rate('login:'+req.socket.remoteAddress,30);const b=await body(req),login=clean(b.login,254).toLowerCase();const user=one('SELECT * FROM users WHERE username=? OR email=?',login,login);if(!user||typeof b.password!=='string'||b.password.length>200||!await verify(b.password,user.password))fail(401,'login_failed');await newSession(req,res,user);return}
 if(p==='/api/auth/recover'&&method==='POST'){rate('recover:'+req.socket.remoteAddress,10);const b=await body(req),user=one('SELECT * FROM users WHERE username=?',clean(b.username,32).toLowerCase());if(!user||hash(clean(b.code,200))!==user.recovery||typeof b.password!=='string'||b.password.length<10||b.password.length>200)fail(400,'recovery_failed');const recovery=randomBytes(18).toString('base64url');run('UPDATE users SET password=?,recovery=? WHERE id=?',await password(b.password),hash(recovery),user.id);run('DELETE FROM sessions WHERE user_id=?',user.id);await newSession(req,res,one('SELECT * FROM users WHERE id=?',user.id),{recovery});return}
 if(!u)fail(401,'login_required');
+if(p==='/api/telegram/order'&&method==='POST'){if(!telegram.configured()||!telegram.status().adminConnected)fail(503,'telegram_setup');rate('telegram-order:'+uid,20);const b=await body(req);if(!Object.hasOwn(PLANS,b.plan)||b.plan==='free')fail(400,'invalid_request');response(res,telegram.createOrder(uid,b.plan));return}
 if(p==='/api/auth/logout'&&method==='POST'){run('DELETE FROM sessions WHERE id=?',session.id);response(res,{ok:true},200,{'set-cookie':cookie('',0)});return}
 if(p==='/api/profile'&&method==='PATCH'){const b=await body(req);if(!clean(b.name,80))fail(400,'invalid_request');run('UPDATE users SET name=?,bio=? WHERE id=?',clean(b.name,80),clean(b.bio,300),uid);response(res,publicUser(one('SELECT * FROM users WHERE id=?',uid)));return}
 if(p==='/api/auth/password'&&method==='POST'){const b=await body(req);if(!b.current||!await verify(b.current,u.password)||typeof b.password!=='string'||b.password.length<10||b.password.length>200)fail(400,'password_invalid');run('UPDATE users SET password=? WHERE id=?',await password(b.password),uid);run('DELETE FROM sessions WHERE user_id=? AND id<>?',uid,session.id);response(res,{ok:true});return}
@@ -204,6 +214,6 @@ if(p==='/api/drive/import'&&method==='POST'){const b=await body(req);if(!/^[a-zA
 if(p==='/api/drive/disconnect'&&method==='POST'){const row=one('SELECT * FROM drive_tokens WHERE user_id=?',uid);if(row){const t=unseal(row.sealed);await fetch('https://oauth2.googleapis.com/revoke',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:t.refresh_token||t.access_token})}).catch(()=>{});run('DELETE FROM drive_tokens WHERE user_id=?',uid)}response(res,{ok:true});return}
 fail(404,'not_found');
 }catch(e){if(!res.headersSent)response(res,{error:e.code||'server_error'},e.status||500);else res.end();if(!e.status)console.error('Request failed:',e.message)}});
-server.listen(PORT,HOST,()=>console.log(`Memgraph running at ${ORIGIN}`));
+server.listen(PORT,HOST,()=>{console.log(`Memgraph running at ${ORIGIN}`);telegram.start().catch(()=>console.error('Telegram setup failed; verify TELEGRAM_BOT_TOKEN and public URL.'))});
 setInterval(()=>{run('DELETE FROM sessions WHERE expires<?',Date.now());run('DELETE FROM oauth_states WHERE expires<?',Date.now());limited.clear()},3600000).unref();
 export {server};

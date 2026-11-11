@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check enhancements.js && node --check cyber.js"
+    "check": "node --check server.mjs && node --check enhancements.js && node --check cyber.js && node --check telegram.mjs && node --check admin-ui.js"
   },
   "engines": {
     "node": ">=24.0.0"
