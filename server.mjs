@@ -1,5 +1,6 @@
 import http from 'node:http';
 import {telegramService} from './telegram.mjs';
+import {salesPage} from './sales-page.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, createHash, scrypt, timingSafeEqual, createCipheriv, createDecipheriv } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -107,6 +108,9 @@ const telegram=telegramService({db,plans:PLANS,origin:ORIGIN});
 const server=http.createServer(async(req,res)=>{res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');res.setHeader('X-Frame-Options','DENY');res.setHeader('Permissions-Policy','camera=(),microphone=(),geolocation=()');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 try{
 const url=new URL(req.url,ORIGIN),p=url.pathname,method=req.method;
+if(p==='/tariflar'||p==='/tariflar/'){res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-cache'});res.end(salesPage(PLANS,ORIGIN));return}
+if(p==='/robots.txt'){res.writeHead(200,{'content-type':'text/plain; charset=utf-8'});res.end('User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nSitemap: '+ORIGIN+'/sitemap.xml\n');return}
+if(p==='/sitemap.xml'){res.writeHead(200,{'content-type':'application/xml; charset=utf-8'});res.end('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>'+ORIGIN+'/</loc></url><url><loc>'+ORIGIN+'/tariflar</loc></url></urlset>');return}
 if(p==='/api/telegram/webhook'&&method==='POST'){if(!telegram.verifyWebhook(req.headers['x-telegram-bot-api-secret-token']))fail(403,'permission');await telegram.receive(await body(req));response(res,{ok:true});return}
 // This public trigger can only send today's fixed report to the preconfigured owner,
 // after 21:00 Tashkent, at most once per day. No report contents are returned.
